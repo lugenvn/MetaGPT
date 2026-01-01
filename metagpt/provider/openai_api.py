@@ -138,17 +138,31 @@ class OpenAILLM(BaseLLM):
     def _cons_kwargs(self, messages: list[dict], timeout=USE_CONFIG_TIMEOUT, **extra_kwargs) -> dict:
         kwargs = {
             "messages": messages,
-            "max_tokens": self._get_max_tokens(messages),
             # "n": 1,  # Some services do not provide this parameter, such as mistral
             # "stop": None,  # default it's None and gpt4-v can't have this one
             "temperature": self.config.temperature,
             "model": self.model,
             "timeout": self.get_timeout(timeout),
         }
-        if "o1-" in self.model:
-            # compatible to openai o1-series
+        
+        # Handle max_tokens vs max_completion_tokens
+        # Newer OpenAI models use max_completion_tokens instead of max_tokens
+        max_tokens_value = self._get_max_tokens(messages)
+        use_max_completion_tokens = any(
+            model_name in self.model for model_name in [
+                "gpt-5", "gpt-4o", "o1-", "o3-", "gpt-4-turbo"
+            ]
+        )
+        
+        if use_max_completion_tokens:
+            kwargs["max_completion_tokens"] = max_tokens_value
+        else:
+            kwargs["max_tokens"] = max_tokens_value
+        
+        if "o1-" in self.model or "o3-" in self.model:
+            # o1/o3 models don't support temperature
             kwargs["temperature"] = 1
-            kwargs.pop("max_tokens")
+        
         if extra_kwargs:
             kwargs.update(extra_kwargs)
         return kwargs
